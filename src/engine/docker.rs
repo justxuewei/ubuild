@@ -64,6 +64,20 @@ impl Engine for Docker {
                 &format!("{}:/home/{}/.ssh:ro", ssh_dir.display(), args.image_user),
             ]);
         }
+
+        if args.cargo_cache {
+            let cargo_cache_dir = hdir.join(".cargo").join("registry");
+            if cargo_cache_dir.exists() {
+                cmd.args([
+                    "-v",
+                    &format!(
+                        "{}:/home/{}/.cargo/registry",
+                        cargo_cache_dir.display(),
+                        args.image_user
+                    ),
+                ]);
+            }
+        }
         let ctr_cmd = args.command.join(" ");
         cmd.args([
             // -v $hdir:$hdir
