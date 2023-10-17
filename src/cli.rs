@@ -11,10 +11,11 @@ pub struct Args {
     #[arg(long)]
     pub no_sudo: bool,
 
-    /// Enable cargo cache for Rust. The ubuild checks if
-    /// "$HOME/.cargo/registry" exists. If true, mount this to container.
+    /// Enable rust cache for Rust. If true, it will mount:
+    /// - $HOME/.cargo/git
+    /// - $HOME/.cargo/registry
     #[arg(long, short)]
-    pub cargo_cache: bool,
+    pub rust_cache: bool,
 
     /// Mount base path, the default value is $HOME.
     #[arg(short, long)]

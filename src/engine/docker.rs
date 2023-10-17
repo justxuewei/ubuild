@@ -65,14 +65,26 @@ impl Engine for Docker {
             ]);
         }
 
-        if args.cargo_cache {
-            let cargo_cache_dir = hdir.join(".cargo").join("registry");
-            if cargo_cache_dir.exists() {
+        if args.rust_cache {
+            let cargo_regsitry_dir = hdir.join(".cargo").join("registry");
+            if cargo_regsitry_dir.exists() {
                 cmd.args([
                     "-v",
                     &format!(
                         "{}:/home/{}/.cargo/registry",
-                        cargo_cache_dir.display(),
+                        cargo_regsitry_dir.display(),
+                        args.image_user
+                    ),
+                ]);
+            }
+
+            let cargo_git_dir = hdir.join(".cargo").join("git");
+            if cargo_git_dir.exists() {
+                cmd.args([
+                    "-v",
+                    &format!(
+                        "{}:/home/{}/.cargo/git",
+                        cargo_git_dir.display(),
                         args.image_user
                     ),
                 ]);
