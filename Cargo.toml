@@ -8,3 +8,9 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0"
 clap = { version = "4.0", features = ["derive"] }
+signal-hook = "0.3"
+tokio = {version = "1.4", features = ["full"]}
+async-trait = "0.1"
+futures = "0.3"
+nix = "0.20"
+ctrlc = "3.4"

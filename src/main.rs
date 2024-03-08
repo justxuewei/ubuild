@@ -1,17 +1,21 @@
 #![allow(deprecated)]
 
-mod cli;
-mod engine;
-
 use clap::Parser;
 use cli::Args;
 use engine::{Docker, Engine};
 
-fn main() {
-    let args = Args::parse();
+mod cli;
+mod engine;
 
-    let engine = Docker::new();
-    if let Err(err) = engine.run(&args) {
-        panic!("{}", err);
+#[tokio::main]
+async fn main() {
+    let args = Args::parse();
+    let mut engine = Docker::new(args.clone());
+
+    if let Err(err) = engine.run().await {
+        panic!("failed to run: {:?}", err);
+    }
+    if let Err(err) = engine.clear().await {
+        panic!("failed to clear: {:?}", err);
     }
 }
