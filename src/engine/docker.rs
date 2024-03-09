@@ -1,5 +1,6 @@
 use std::env::{current_dir, home_dir};
 use std::path::PathBuf;
+use std::process::Stdio;
 
 use anyhow::{anyhow, Context, Result};
 use async_trait::async_trait;
@@ -7,7 +8,6 @@ use tokio::process::Command;
 
 use crate::cli::Args;
 use crate::engine::Engine;
-
 use super::new_command;
 
 pub struct Docker {
@@ -47,7 +47,7 @@ impl Docker {
         //  $image \
         //  bash -c "source /home/$IMAGEUSER/.bashrc && $cmd"
         let mut cmd = new_command("docker", !self.args.no_sudo);
-        cmd.args(["run", "--rm", "-d"]);
+        cmd.args(["run", "-d"]);
         if !self.args.no_ssh {
             let mut ssh_dir = hdir.clone();
             ssh_dir.push(".ssh");
@@ -146,6 +146,8 @@ impl Engine for Docker {
         if let Some(id) = self.id.as_ref() {
             let mut cmd = new_command("docker", !self.args.no_sudo);
             cmd.args(["rm", "-f", id]);
+            cmd.stdout(Stdio::null());
+            
             let mut child = cmd.spawn()?;
             child.wait().await?;
             println!("container removed");
