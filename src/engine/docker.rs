@@ -150,7 +150,6 @@ impl Engine for Docker {
             
             let mut child = cmd.spawn()?;
             child.wait().await?;
-            println!("container removed");
         }
         Ok(())
     }
