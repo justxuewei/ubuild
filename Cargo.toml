@@ -14,3 +14,7 @@ async-trait = "0.1"
 futures = "0.3"
 nix = "0.20"
 ctrlc = "3.4"
+toml = "0.5"
+serde = { version = "1.0", features = ["derive"] }
+serde_urlencoded = "0.7"
+reqwest = "0.11"

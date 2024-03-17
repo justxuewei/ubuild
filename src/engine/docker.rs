@@ -1,14 +1,14 @@
 use std::env::{current_dir, home_dir};
 use std::path::PathBuf;
-use std::process::Stdio;
+use std::process::{ExitStatus, Stdio};
 
 use anyhow::{anyhow, Context, Result};
 use async_trait::async_trait;
 use tokio::process::Command;
 
+use super::new_command;
 use crate::cli::Args;
 use crate::engine::Engine;
-use super::new_command;
 
 pub struct Docker {
     id: Option<String>,
@@ -117,7 +117,7 @@ impl Docker {
 
 #[async_trait]
 impl Engine for Docker {
-    async fn run(&mut self) -> Result<()> {
+    async fn run(&mut self) -> Result<ExitStatus> {
         self.check().await.context("check")?;
 
         let mut cmd = self.build_docker_run_command()?;
@@ -137,9 +137,8 @@ impl Engine for Docker {
         cmd.args(["logs", "-f", stdout]);
 
         let mut child = cmd.spawn()?;
-        child.wait().await?;
 
-        Ok(())
+        Ok(child.wait().await?)
     }
 
     async fn clear(&self) -> Result<()> {
@@ -147,7 +146,7 @@ impl Engine for Docker {
             let mut cmd = new_command("docker", !self.args.no_sudo);
             cmd.args(["rm", "-f", id]);
             cmd.stdout(Stdio::null());
-            
+
             let mut child = cmd.spawn()?;
             child.wait().await?;
         }

@@ -1,13 +1,15 @@
-mod docker;
-pub use docker::Docker;
+use std::process::ExitStatus;
 
 use anyhow::Result;
 use async_trait::async_trait;
 use tokio::process::Command;
 
+mod docker;
+pub use docker::Docker;
+
 #[async_trait]
 pub trait Engine {
-    async fn run(&mut self) -> Result<()>;
+    async fn run(&mut self) -> Result<ExitStatus>;
     async fn clear(&self) -> Result<()>;
 }
 
