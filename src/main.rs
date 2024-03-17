@@ -1,14 +1,18 @@
 #![allow(deprecated)]
 
+use chrono::Local;
 use clap::Parser;
-use cli::Args;
-use engine::{Docker, Engine};
-use notifier::{serverchan::ServerChan, Notifier};
 
 mod cli;
+use cli::Args;
+
 mod config;
+
 mod engine;
+use engine::{Docker, Engine};
+
 mod notifier;
+use notifier::{serverchan::ServerChan, Notifier};
 
 #[tokio::main]
 async fn main() {
@@ -30,7 +34,12 @@ async fn main() {
 
     if exitcode.success() {
         if let Some(notifier) = notifier {
-            notifier.send("ubuild", "build completed!").await.unwrap();
+            let now = Local::now();
+            let formatted = now.format("%H:%M:%S").to_string();
+            notifier
+                .send("ubuild", &format!("build completed at {}!", formatted))
+                .await
+                .unwrap();
         }
     }
 
