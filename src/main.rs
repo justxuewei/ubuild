@@ -2,6 +2,7 @@
 
 use std::io::Write;
 
+use anyhow::Result;
 use chrono::Local;
 use clap::Parser;
 use env_logger::{Builder, Env};
@@ -15,8 +16,8 @@ mod engine;
 use engine::{Docker, Engine};
 
 mod notifier;
-use log::{debug, LevelFilter};
-use notifier::{serverchan::ServerChan, telegram::Telegram};
+use log::{debug, error, LevelFilter};
+use notifier::{serverchan::ServerChan, telegram::Telegram, Notifier};
 
 fn init_log() {
     Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "info");
@@ -24,7 +25,7 @@ fn init_log() {
         .format(|buf, record| {
             writeln!(
                 buf,
-                "{} [{}] - {}",
+                "{} [{}] {}",
                 Local::now().format("%Y-%m-%dT%H:%M:%S"),
                 record.level(),
                 record.args()
@@ -32,6 +33,28 @@ fn init_log() {
         })
         .filter(None, LevelFilter::Info)
         .init();
+}
+
+async fn send_notification(notifier: &Option<Box<dyn Notifier>>, exit_code: i32) -> Result<()> {
+    let notifier = match notifier.as_ref() {
+        Some(n) => n,
+        None => {
+            debug!("notifiction can't be sent due to no notifier");
+            return Ok(());
+        }
+    };
+    let now = Local::now();
+    let formatted = now.format("%H:%M:%S").to_string();
+
+    let message = if exit_code == 0 {
+        format!("completed!\n{}", formatted)
+    } else {
+        format!("exited with non-zero code {}!\n{}", exit_code, formatted)
+    };
+
+    notifier.send("ubuild", &message).await?;
+
+    Ok(())
 }
 
 #[tokio::main]
@@ -56,23 +79,11 @@ async fn main() {
         }
     }
 
-    let exitcode = engine.run().await.unwrap();
+    engine.run().await.unwrap();
+    let exit_code = engine.exit_code().await;
 
-    if exitcode.success() {
-        if let Some(notifier) = notifier {
-            let now = Local::now();
-            let formatted = now.format("%H:%M:%S").to_string();
-            let ret = notifier
-                .send("ubuild", &format!("build completed at {}!", formatted))
-                .await;
-            if let Err(err) = ret {
-                println!("sent notification failed: {:?}", err);
-            }
-        } else {
-            debug!("notifier is empty");
-        }
-    } else {
-        debug!("engine.run() failed");
+    if let Err(err) = send_notification(&notifier, exit_code).await {
+        error!("failed to send notification: {}", err);
     }
 
     if let Err(err) = engine.clear().await {

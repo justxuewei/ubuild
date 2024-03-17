@@ -1,5 +1,6 @@
 use anyhow::Result;
 use async_trait::async_trait;
+use log::error;
 use reqwest::header::{CONTENT_LENGTH, CONTENT_TYPE};
 
 use crate::config::NotifierConfig;
@@ -33,7 +34,7 @@ impl Notifier for ServerChan {
             .send()
             .await?;
         if res.status() != 200 {
-            println!("WARN: serverchan send failed: {}", res.text().await?);
+            error!("serverchan sent failed: {}", res.text().await?);
         }
 
         Ok(())

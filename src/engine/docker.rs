@@ -1,9 +1,10 @@
 use std::env::{current_dir, home_dir};
 use std::path::PathBuf;
-use std::process::{ExitStatus, Stdio};
+use std::process::Stdio;
 
 use anyhow::{anyhow, Context, Result};
 use async_trait::async_trait;
+use log::error;
 use tokio::process::Command;
 
 use super::new_command;
@@ -13,11 +14,16 @@ use crate::engine::Engine;
 pub struct Docker {
     id: Option<String>,
     args: Args,
+    exit_code: i32,
 }
 
 impl Docker {
     pub fn new(args: Args) -> Self {
-        Self { id: None, args }
+        Self {
+            id: None,
+            args,
+            exit_code: 0,
+        }
     }
 }
 
@@ -117,7 +123,7 @@ impl Docker {
 
 #[async_trait]
 impl Engine for Docker {
-    async fn run(&mut self) -> Result<ExitStatus> {
+    async fn run(&mut self) -> Result<()> {
         self.check().await.context("check")?;
 
         let mut cmd = self.build_docker_run_command()?;
@@ -138,7 +144,48 @@ impl Engine for Docker {
 
         let mut child = cmd.spawn()?;
 
-        Ok(child.wait().await?)
+        self.exit_code = child.wait().await?.code().unwrap_or(0);
+
+        Ok(())
+    }
+
+    async fn exit_code(&self) -> i32 {
+        if self.exit_code != 0 {
+            return self.exit_code;
+        }
+
+        let mut cmd = new_command("docker", !self.args.no_sudo);
+        cmd.args(&[
+            "inspect",
+            "-f",
+            "{{.State.ExitCode}}",
+            self.id.as_ref().unwrap(),
+        ]);
+        let stdout = match cmd.output().await {
+            Ok(output) => output.stdout,
+            Err(err) => {
+                error!("failed to exec docker inspect: {}", err);
+                return -1;
+            }
+        };
+        let stdout = match String::from_utf8(stdout) {
+            Ok(stdout) => stdout,
+            Err(err) => {
+                error!("failed to build string from output: {}", err);
+                return -1;
+            }
+        };
+        let stdout = stdout.trim_end_matches('\n');
+
+        let exit_code: i32 = match stdout.parse() {
+            Ok(code) => code,
+            Err(err) => {
+                error!("failed to parse exit code from \"{}\": {}", stdout, err);
+                return -1;
+            }
+        };
+
+        exit_code
     }
 
     async fn clear(&self) -> Result<()> {

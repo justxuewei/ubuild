@@ -1,5 +1,3 @@
-use std::process::ExitStatus;
-
 use anyhow::Result;
 use async_trait::async_trait;
 use tokio::process::Command;
@@ -9,7 +7,8 @@ pub use docker::Docker;
 
 #[async_trait]
 pub trait Engine {
-    async fn run(&mut self) -> Result<ExitStatus>;
+    async fn run(&mut self) -> Result<()>;
+    async fn exit_code(&self) -> i32;
     async fn clear(&self) -> Result<()>;
 }
 
