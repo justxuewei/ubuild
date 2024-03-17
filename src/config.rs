@@ -13,6 +13,8 @@ pub struct Config {
 pub struct NotifierConfig {
     pub r#type: String,
     pub secret: String,
+    // reserved for telegram
+    pub chat_id: i64,
 }
 
 pub async fn load() -> Config {

@@ -11,10 +11,10 @@ pub struct ServerChan {
 }
 
 impl ServerChan {
-    pub fn new(config: &NotifierConfig) -> ServerChan {
-        ServerChan {
+    pub async fn new_notifer(config: &NotifierConfig) -> Box<dyn Notifier> {
+        Box::new(ServerChan {
             send_key: config.secret.clone(),
-        }
+        })
     }
 }
 
