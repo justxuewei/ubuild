@@ -1,11 +1,11 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use teloxide::requests::Requester;
 use teloxide::types::ChatId;
 use teloxide::Bot;
 
 use super::Notifier;
-use crate::config::NotifierConfig;
+use crate::config::Config;
 
 pub struct Telegram {
     bot: Bot,
@@ -13,13 +13,18 @@ pub struct Telegram {
 }
 
 impl Telegram {
-    pub async fn new_notifier(config: &NotifierConfig) -> Box<dyn Notifier> {
-        let bot = Bot::new(&config.secret);
+    pub async fn new_notifier(config: &Config) -> Result<Box<dyn Notifier>> {
+        let notifier_config = match config.notifier.as_ref() {
+            Some(nc) => nc,
+            None => return Err(anyhow!("no notifier config")),
+        };
 
-        Box::new(Telegram {
+        let bot = Bot::new(&notifier_config.secret);
+
+        Ok(Box::new(Telegram {
             bot,
-            chat_id: ChatId(config.chat_id),
-        })
+            chat_id: ChatId(notifier_config.chat_id),
+        }))
     }
 }
 

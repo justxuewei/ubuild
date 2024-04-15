@@ -4,17 +4,25 @@ use tokio::fs;
 
 const DEFAULT_CONFIG_PATH: &str = ".ubuild";
 
-#[derive(serde::Deserialize, Default, Debug)]
+#[derive(serde::Deserialize, Default, Debug, Clone)]
 pub struct Config {
     pub notifier: Option<NotifierConfig>,
+    pub proxy: Option<ProxyConfig>,
 }
 
-#[derive(serde::Deserialize, Default, Debug)]
+#[derive(serde::Deserialize, Default, Debug, Clone)]
 pub struct NotifierConfig {
     pub r#type: String,
     pub secret: String,
     // reserved for telegram
     pub chat_id: i64,
+}
+
+#[derive(serde::Deserialize, Default, Debug, Clone)]
+pub struct ProxyConfig {
+    pub http: Option<String>,
+    pub https: Option<String>,
+    pub sock5: Option<String>,
 }
 
 pub async fn load() -> Config {

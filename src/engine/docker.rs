@@ -155,7 +155,7 @@ impl Engine for Docker {
         }
 
         let mut cmd = new_command("docker", !self.args.no_sudo);
-        cmd.args(&[
+        cmd.args([
             "inspect",
             "-f",
             "{{.State.ExitCode}}",

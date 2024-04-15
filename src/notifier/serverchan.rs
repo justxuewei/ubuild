@@ -1,21 +1,25 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use log::error;
 use reqwest::header::{CONTENT_LENGTH, CONTENT_TYPE};
 
-use crate::config::NotifierConfig;
-
 use super::Notifier;
+use crate::config::Config;
 
 pub struct ServerChan {
     send_key: String,
 }
 
 impl ServerChan {
-    pub async fn new_notifer(config: &NotifierConfig) -> Box<dyn Notifier> {
-        Box::new(ServerChan {
-            send_key: config.secret.clone(),
-        })
+    pub async fn new_notifer(config: &Config) -> Result<Box<dyn Notifier>> {
+        let notifier_config = match config.notifier.as_ref() {
+            Some(nc) => nc,
+            None => return Err(anyhow!("no notifier config")),
+        };
+
+        Ok(Box::new(ServerChan {
+            send_key: notifier_config.secret.clone(),
+        }))
     }
 }
 
