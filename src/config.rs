@@ -14,7 +14,10 @@ pub struct Config {
 pub struct NotifierConfig {
     pub r#type: String,
     pub secret: String,
-    // reserved for telegram
+    // If actual building time is less than this value, don't send
+    // notification. The unit is in seconds.
+    pub elapsed_threshold: u64,
+    // Reserved for telegram
     pub chat_id: i64,
 }
 

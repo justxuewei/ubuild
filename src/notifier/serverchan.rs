@@ -8,6 +8,7 @@ use crate::config::Config;
 
 pub struct ServerChan {
     send_key: String,
+    elapsed_threshold: u64,
 }
 
 impl ServerChan {
@@ -19,6 +20,7 @@ impl ServerChan {
 
         Ok(Box::new(ServerChan {
             send_key: notifier_config.secret.clone(),
+            elapsed_threshold: notifier_config.elapsed_threshold,
         }))
     }
 }
@@ -42,5 +44,9 @@ impl Notifier for ServerChan {
         }
 
         Ok(())
+    }
+
+    async fn should_send(&self, elapsed: u64) -> bool {
+        elapsed >= self.elapsed_threshold
     }
 }

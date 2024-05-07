@@ -10,6 +10,7 @@ use crate::config::Config;
 pub struct Telegram {
     bot: Bot,
     chat_id: ChatId,
+    elapsed_threshold: u64,
 }
 
 impl Telegram {
@@ -24,6 +25,7 @@ impl Telegram {
         Ok(Box::new(Telegram {
             bot,
             chat_id: ChatId(notifier_config.chat_id),
+            elapsed_threshold: notifier_config.elapsed_threshold,
         }))
     }
 }
@@ -36,5 +38,9 @@ impl Notifier for Telegram {
             .await?;
 
         Ok(())
+    }
+
+    async fn should_send(&self, elapsed: u64) -> bool {
+        elapsed >= self.elapsed_threshold
     }
 }

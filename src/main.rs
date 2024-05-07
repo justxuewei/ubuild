@@ -1,6 +1,8 @@
 #![allow(deprecated)]
 
-use std::{env, io::Write};
+use std::env;
+use std::io::Write;
+use std::time::Instant;
 
 mod cli;
 use cli::Args;
@@ -35,7 +37,11 @@ fn init_log() {
         .init();
 }
 
-async fn send_notification(notifier: &Option<Box<dyn Notifier>>, exit_code: i32) -> Result<()> {
+async fn send_notification(
+    notifier: &Option<Box<dyn Notifier>>,
+    exit_code: i32,
+    elapsed: u64,
+) -> Result<()> {
     let notifier = match notifier.as_ref() {
         Some(n) => n,
         None => {
@@ -43,6 +49,12 @@ async fn send_notification(notifier: &Option<Box<dyn Notifier>>, exit_code: i32)
             return Ok(());
         }
     };
+
+    if !notifier.should_send(elapsed).await {
+        debug!("notification won't be sent due to low elapsed time");
+        return Ok(());
+    }
+
     let now = Local::now();
     let formatted = now.format("%H:%M:%S").to_string();
 
@@ -112,11 +124,14 @@ async fn main() {
     let mut engine = Docker::new(args.clone());
     let notifier = new_notifier(&config).await.unwrap();
 
-    engine.run().await.unwrap();
-    let exit_code = engine.exit_code().await;
-    info!(">>>>> task exited with code {}", exit_code);
+    let started = Instant::now();
 
-    if let Err(err) = send_notification(&notifier, exit_code).await {
+    engine.run().await.unwrap();
+    let duration = started.elapsed().as_secs();
+    let exit_code = engine.exit_code().await;
+    info!("task exited with code {}, elapsed {}s", exit_code, duration);
+
+    if let Err(err) = send_notification(&notifier, exit_code, duration).await {
         error!("failed to send notification: {}", err);
     }
 
