@@ -5,6 +5,9 @@ use tokio::process::Command;
 mod docker;
 pub use docker::Docker;
 
+pub(crate) const HTTP_PROXY: &str = "http_proxy";
+pub(crate) const HTTPS_PROXY: &str = "https_proxy";
+
 #[async_trait]
 pub trait Engine {
     async fn run(&mut self) -> Result<()>;

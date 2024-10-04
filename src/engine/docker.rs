@@ -1,15 +1,19 @@
+use std::collections::HashMap;
+use std::env;
 use std::env::{current_dir, home_dir};
 use std::path::PathBuf;
 use std::process::Stdio;
 
 use anyhow::{anyhow, Context, Result};
 use async_trait::async_trait;
-use log::error;
+use log::{error, info};
 use tokio::process::Command;
 
-use super::new_command;
 use crate::cli::Args;
 use crate::engine::Engine;
+use crate::engine::{new_command, HTTP_PROXY};
+
+use super::HTTPS_PROXY;
 
 pub struct Docker {
     id: Option<String>,
@@ -98,6 +102,25 @@ impl Docker {
                 ]);
             }
         }
+
+        let mut proxies = HashMap::new();
+        if let Ok(v) = env::var(HTTP_PROXY) {
+            proxies.insert(HTTP_PROXY.to_string(), v);
+        }
+        if let Ok(v) = env::var(HTTPS_PROXY) {
+            proxies.insert(HTTPS_PROXY.to_string(), v);
+        }
+        // use host network to prevent from failure of connecting local proxies
+        if !proxies.is_empty() {
+            info!("found proxy settings, use host network");
+            cmd.args(["--network", "host"]);
+        }
+        // set a series of proxy settings, e.g.
+        // --env http_proxy=http://127.0.0.1:1088
+        for (k, v) in proxies.iter() {
+            cmd.args(["--env", &format!("{}={}", k, v)]);
+        }
+
         let ctr_cmd = self.args.command.join(" ");
         cmd.args([
             // -v $hdir:$hdir
