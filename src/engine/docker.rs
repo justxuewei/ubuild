@@ -1,8 +1,9 @@
 use std::collections::HashMap;
-use std::env;
 use std::env::{current_dir, home_dir};
+use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::process::Stdio;
+use std::{env, fs};
 
 use anyhow::{anyhow, Context, Result};
 use async_trait::async_trait;
@@ -10,10 +11,9 @@ use log::{error, info};
 use tokio::process::Command;
 
 use crate::cli::Args;
-use crate::engine::Engine;
-use crate::engine::{new_command, HTTP_PROXY};
+use crate::engine::{new_command, Engine, HTTPS_PROXY, HTTP_PROXY};
 
-use super::HTTPS_PROXY;
+const ROOT_PATH: &str = "/";
 
 pub struct Docker {
     id: Option<String>,
@@ -40,14 +40,45 @@ impl Docker {
         Ok(())
     }
 
+    fn get_root_path(&self) -> Result<PathBuf> {
+        let mut root_dir = current_dir()
+            .context("get current dir")?
+            .canonicalize()
+            .context("canonicalize")?;
+
+        // find root dir recursively, stop while no parent dir exists or no
+        // permission.
+        while let Some(parent) = root_dir.parent() {
+            if parent
+                .canonicalize()
+                .context("canonicalize")?
+                .as_path()
+                .as_os_str()
+                .to_str()
+                .ok_or(anyhow!("empty parent dir path"))?
+                == ROOT_PATH
+            {
+                break;
+            }
+            let metadata = fs::metadata(parent).context("metadata")?;
+            let mode = metadata.permissions().mode();
+            if mode & 0o444 == 0 {
+                break;
+            }
+            root_dir = parent.canonicalize().context("canonicalize")?;
+        }
+
+        Ok(root_dir)
+    }
+
     fn build_docker_run_command(&mut self) -> Result<Command> {
-        let cdir = current_dir().context("get current dir")?;
+        let current_dir = current_dir().context("get current dir")?;
         // TODO: This might not work on the Windows.
-        let hdir = home_dir().context("get home dir")?;
+        let home_dir = home_dir().context("get home dir")?;
         let mount_path = if let Some(path) = self.args.base_path.as_ref() {
             PathBuf::from(path)
         } else {
-            hdir.clone()
+            self.get_root_path().context("go to root")?
         };
 
         // docker run -d \
@@ -59,7 +90,7 @@ impl Docker {
         let mut cmd = new_command("docker", !self.args.no_sudo);
         cmd.args(["run", "-d"]);
         if !self.args.no_ssh {
-            let mut ssh_dir = hdir.clone();
+            let mut ssh_dir = home_dir.clone();
             ssh_dir.push(".ssh");
             if !ssh_dir.exists() {
                 return Err(anyhow!(
@@ -78,7 +109,7 @@ impl Docker {
         }
 
         if self.args.rust_cache {
-            let cargo_regsitry_dir = hdir.join(".cargo").join("registry");
+            let cargo_regsitry_dir = home_dir.join(".cargo").join("registry");
             if cargo_regsitry_dir.exists() {
                 cmd.args([
                     "-v",
@@ -90,7 +121,7 @@ impl Docker {
                 ]);
             }
 
-            let cargo_git_dir = hdir.join(".cargo").join("git");
+            let cargo_git_dir = home_dir.join(".cargo").join("git");
             if cargo_git_dir.exists() {
                 cmd.args([
                     "-v",
@@ -128,7 +159,7 @@ impl Docker {
             &format!("{}:{}", mount_path.display(), mount_path.display()),
             // -w $cdir
             "-w",
-            &format!("{}", cdir.display()),
+            &format!("{}", current_dir.display()),
             // image
             self.args.image.as_str(),
             // container command
