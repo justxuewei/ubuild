@@ -5,17 +5,17 @@ use clap::Parser;
 pub struct Args {
     /// Do not mount ssh directory ($HOME/.ssh) to container.
     #[arg(long)]
-    pub no_ssh: bool,
+    pub disable_ssh: bool,
 
     /// Do not use sudo.
     #[arg(long)]
-    pub no_sudo: bool,
+    pub disable_sudo: bool,
 
     /// Enable rust cache for Rust. If true, it will mount:
     /// - $HOME/.cargo/git
     /// - $HOME/.cargo/registry
     #[arg(long, short)]
-    pub rust_cache: bool,
+    pub enable_rust_cache: Option<bool>,
 
     /// Mount base path, the default value is $HOME.
     #[arg(short, long)]
@@ -23,7 +23,7 @@ pub struct Args {
 
     /// Default user in image.
     #[arg(long, default_value = "nonroot")]
-    pub image_user: String,
+    pub user: String,
 
     /// Name of image.
     pub image: String,

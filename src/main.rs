@@ -121,7 +121,7 @@ async fn main() {
     let config = config::load().await;
 
     setup_proxy(&config).await.unwrap();
-    let mut engine = Docker::new(args.clone());
+    let mut engine = Docker::new(&args, &config);
     let notifier = new_notifier(&config).await.unwrap();
 
     let started = Instant::now();

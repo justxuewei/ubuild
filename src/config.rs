@@ -8,6 +8,12 @@ const DEFAULT_CONFIG_PATH: &str = ".ubuild";
 pub struct Config {
     pub notifier: Option<NotifierConfig>,
     pub proxy: Option<ProxyConfig>,
+    pub engine: Option<EngineConfig>,
+}
+
+#[derive(serde::Deserialize, Default, Debug, Clone)]
+pub struct EngineConfig {
+    pub enable_rust_cache: Option<bool>,
 }
 
 #[derive(serde::Deserialize, Default, Debug, Clone)]

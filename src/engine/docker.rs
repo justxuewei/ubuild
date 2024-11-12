@@ -11,21 +11,51 @@ use log::{error, info};
 use tokio::process::Command;
 
 use crate::cli::Args;
+use crate::config::Config;
 use crate::engine::{new_command, Engine, HTTPS_PROXY, HTTP_PROXY};
 
 const ROOT_PATH: &str = "/";
 
+pub struct DockerConfig {
+    disable_ssh: bool,
+    disable_sudo: bool,
+    enable_rust_cache: bool,
+    base_path: Option<String>,
+    user: String,
+    image: String,
+    command: Vec<String>,
+}
+
+impl DockerConfig {
+    pub fn new(args: &Args, config: &Config) -> Self {
+        let engine_config = config.engine.as_ref();
+        Self {
+            disable_ssh: args.disable_ssh,
+            disable_sudo: args.disable_sudo,
+            enable_rust_cache: args.enable_rust_cache.unwrap_or_else(|| {
+                engine_config
+                    .and_then(|c| c.enable_rust_cache)
+                    .unwrap_or_default()
+            }),
+            base_path: args.base_path.clone(),
+            user: args.user.clone(),
+            image: args.image.clone(),
+            command: args.command.clone(),
+        }
+    }
+}
+
 pub struct Docker {
     id: Option<String>,
-    args: Args,
+    config: DockerConfig,
     exit_code: i32,
 }
 
 impl Docker {
-    pub fn new(args: Args) -> Self {
+    pub fn new(args: &Args, config: &Config) -> Self {
         Self {
             id: None,
-            args,
+            config: DockerConfig::new(args, config),
             exit_code: 0,
         }
     }
@@ -75,7 +105,7 @@ impl Docker {
         let current_dir = current_dir().context("get current dir")?;
         // TODO: This might not work on the Windows.
         let home_dir = home_dir().context("get home dir")?;
-        let mount_path = if let Some(path) = self.args.base_path.as_ref() {
+        let mount_path = if let Some(path) = self.config.base_path.as_ref() {
             PathBuf::from(path)
         } else {
             self.get_root_path().context("go to root")?
@@ -87,9 +117,9 @@ impl Docker {
         //  -w $(pwd) \
         //  $image \
         //  bash -c "source /home/$IMAGEUSER/.bashrc && $cmd"
-        let mut cmd = new_command("docker", !self.args.no_sudo);
+        let mut cmd = new_command("docker", !self.config.disable_sudo);
         cmd.args(["run", "-d"]);
-        if !self.args.no_ssh {
+        if !self.config.disable_ssh {
             let mut ssh_dir = home_dir.clone();
             ssh_dir.push(".ssh");
             if !ssh_dir.exists() {
@@ -100,15 +130,11 @@ impl Docker {
             }
             cmd.args([
                 "-v",
-                &format!(
-                    "{}:/home/{}/.ssh:ro",
-                    ssh_dir.display(),
-                    self.args.image_user
-                ),
+                &format!("{}:/home/{}/.ssh:ro", ssh_dir.display(), self.config.user),
             ]);
         }
 
-        if self.args.rust_cache {
+        if self.config.enable_rust_cache {
             let cargo_regsitry_dir = home_dir.join(".cargo").join("registry");
             if cargo_regsitry_dir.exists() {
                 cmd.args([
@@ -116,7 +142,7 @@ impl Docker {
                     &format!(
                         "{}:/home/{}/.cargo/registry",
                         cargo_regsitry_dir.display(),
-                        self.args.image_user
+                        self.config.user
                     ),
                 ]);
             }
@@ -128,7 +154,7 @@ impl Docker {
                     &format!(
                         "{}:/home/{}/.cargo/git",
                         cargo_git_dir.display(),
-                        self.args.image_user
+                        self.config.user
                     ),
                 ]);
             }
@@ -152,7 +178,7 @@ impl Docker {
             cmd.args(["--env", &format!("{}={}", k, v)]);
         }
 
-        let ctr_cmd = self.args.command.join(" ");
+        let ctr_cmd = self.config.command.join(" ");
         cmd.args([
             // -v $hdir:$hdir
             "-v",
@@ -161,14 +187,11 @@ impl Docker {
             "-w",
             &format!("{}", current_dir.display()),
             // image
-            self.args.image.as_str(),
+            self.config.image.as_str(),
             // container command
             "bash",
             "-c",
-            &format!(
-                "source /home/{}/.bashrc && {}",
-                self.args.image_user, ctr_cmd
-            ),
+            &format!("source /home/{}/.bashrc && {}", self.config.user, ctr_cmd),
         ]);
 
         Ok(cmd)
@@ -191,7 +214,7 @@ impl Engine for Docker {
             return Err(anyhow!("failed to exec docker run: {}", stdout));
         }
 
-        let mut cmd = new_command("docker", !self.args.no_sudo);
+        let mut cmd = new_command("docker", !self.config.disable_sudo);
 
         // docker logs -f {container id}
         cmd.args(["logs", "-f", stdout]);
@@ -208,7 +231,7 @@ impl Engine for Docker {
             return self.exit_code;
         }
 
-        let mut cmd = new_command("docker", !self.args.no_sudo);
+        let mut cmd = new_command("docker", !self.config.disable_sudo);
         cmd.args([
             "inspect",
             "-f",
@@ -244,7 +267,7 @@ impl Engine for Docker {
 
     async fn clear(&self) -> Result<()> {
         if let Some(id) = self.id.as_ref() {
-            let mut cmd = new_command("docker", !self.args.no_sudo);
+            let mut cmd = new_command("docker", !self.config.disable_sudo);
             cmd.args(["rm", "-f", id]);
             cmd.stdout(Stdio::null());
 
