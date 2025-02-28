@@ -1,9 +1,8 @@
 use std::collections::HashMap;
+use std::env;
 use std::env::{current_dir, home_dir};
-use std::os::unix::fs::PermissionsExt;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::Stdio;
-use std::{env, fs, io};
 
 use anyhow::{anyhow, Context, Result};
 use async_trait::async_trait;
@@ -13,9 +12,6 @@ use tokio::process::Command;
 use crate::cli::Args;
 use crate::config::Config;
 use crate::engine::{new_command, Engine, HTTPS_PROXY, HTTP_PROXY};
-
-const ROOT_PATH: &str = "/";
-const HOME_PATH: &str = "/home";
 
 pub struct DockerConfig {
     disable_ssh: bool,
@@ -74,42 +70,42 @@ impl Docker {
         Ok(())
     }
 
-    fn get_root_path(&self) -> Result<PathBuf> {
-        let mut root_dir = current_dir()
-            .context("get current dir")?
-            .canonicalize()
-            .context("canonicalize")?;
+    // fn get_root_path(&self) -> Result<PathBuf> {
+    //     let mut root_dir = current_dir()
+    //         .context("get current dir")?
+    //         .canonicalize()
+    //         .context("canonicalize")?;
 
-        if !has_read_permission(root_dir.as_path()).context("has read permission")? {
-            return Err(anyhow!("no permission to read {:?}", root_dir));
-        }
+    //     if !has_read_permission(root_dir.as_path()).context("has read permission")? {
+    //         return Err(anyhow!("no permission to read {:?}", root_dir));
+    //     }
 
-        // find root dir recursively, stop while no parent dir exists or no
-        // permission.
-        while let Some(parent) = root_dir.parent() {
-            let parent_dir = parent.canonicalize().context("canonicalize")?;
-            let parent_dir_name = parent_dir
-                .as_path()
-                .as_os_str()
-                .to_str()
-                .ok_or(anyhow!("empty parent dir path"))?;
+    //     // find root dir recursively, stop while no parent dir exists or no
+    //     // permission.
+    //     while let Some(parent) = root_dir.parent() {
+    //         let parent_dir = parent.canonicalize().context("canonicalize")?;
+    //         let parent_dir_name = parent_dir
+    //             .as_path()
+    //             .as_os_str()
+    //             .to_str()
+    //             .ok_or(anyhow!("empty parent dir path"))?;
 
-            if parent_dir_name == ROOT_PATH
-                || parent_dir_name == HOME_PATH
-                || !has_read_permission(parent_dir.as_path()).context("has read permission")?
-            {
-                break;
-            }
-            let metadata = fs::metadata(parent).context("metadata")?;
-            let mode = metadata.permissions().mode();
-            if mode & 0o444 == 0 {
-                break;
-            }
-            root_dir = parent.canonicalize().context("canonicalize")?;
-        }
+    //         if parent_dir_name == ROOT_PATH
+    //             || parent_dir_name == HOME_PATH
+    //             || !has_read_permission(parent_dir.as_path()).context("has read permission")?
+    //         {
+    //             break;
+    //         }
+    //         let metadata = fs::metadata(parent).context("metadata")?;
+    //         let mode = metadata.permissions().mode();
+    //         if mode & 0o444 == 0 {
+    //             break;
+    //         }
+    //         root_dir = parent.canonicalize().context("canonicalize")?;
+    //     }
 
-        Ok(root_dir)
-    }
+    //     Ok(root_dir)
+    // }
 
     fn build_docker_run_command(&mut self) -> Result<Command> {
         let current_dir = current_dir().context("get current dir")?;
@@ -118,7 +114,7 @@ impl Docker {
         let mount_path = if let Some(path) = self.config.base_path.as_ref() {
             PathBuf::from(path)
         } else {
-            self.get_root_path().context("go to root")?
+            current_dir
         };
 
         // docker run -d \
@@ -128,7 +124,7 @@ impl Docker {
         //  $image \
         //  bash -c "source /home/$IMAGEUSER/.bashrc && $cmd"
         let mut cmd = new_command("docker", !self.config.disable_sudo);
-        cmd.args(["run", "-d"]);
+        cmd.args(["run", "-d", "--user", &format!("{}", current_uid())]);
         if !self.config.disable_ssh {
             let mut ssh_dir = home_dir.clone();
             ssh_dir.push(".ssh");
@@ -190,18 +186,18 @@ impl Docker {
 
         let ctr_cmd = self.config.command.join(" ");
         cmd.args([
-            // -v $hdir:$hdir
+            // -v $hdir:$HOME/workdir
             "-v",
-            &format!("{}:{}", mount_path.display(), mount_path.display()),
+            &format!("{}:/workdir", mount_path.display()),
             // -w $cdir
             "-w",
-            &format!("{}", current_dir.display()),
+            "/workdir",
             // image
             self.config.image.as_str(),
             // container command
             "bash",
             "-c",
-            &format!("source /home/{}/.bashrc && {}", self.config.user, ctr_cmd),
+            &format!("{} && {}", pre_exec_shell(&self.config.user), ctr_cmd),
         ]);
 
         Ok(cmd)
@@ -289,26 +285,42 @@ impl Engine for Docker {
     }
 }
 
-fn has_read_permission(path: &Path) -> Result<bool> {
-    match fs::metadata(path) {
-        Ok(metadata) => {
-            if metadata.is_file() {
-                match fs::File::open(path) {
-                    Ok(_) => Ok(true),
-                    Err(err) if err.kind() == io::ErrorKind::PermissionDenied => Ok(false),
-                    Err(err) => Err(anyhow!("failed to open file: {:?}", err)),
-                }
-            } else if metadata.is_dir() {
-                match fs::read_dir(path) {
-                    Ok(_) => Ok(true),
-                    Err(err) if err.kind() == io::ErrorKind::PermissionDenied => Ok(false),
-                    Err(err) => Err(anyhow!("failed to read dir: {:?}", err)),
-                }
-            } else {
-                Ok(false)
-            }
-        }
-        Err(err) if err.kind() == io::ErrorKind::PermissionDenied => Ok(false),
-        Err(err) => Err(anyhow!("failed to get metadata: {:?}", err)),
-    }
+// fn has_read_permission(path: &Path) -> Result<bool> {
+//     match fs::metadata(path) {
+//         Ok(metadata) => {
+//             if metadata.is_file() {
+//                 match fs::File::open(path) {
+//                     Ok(_) => Ok(true),
+//                     Err(err) if err.kind() == io::ErrorKind::PermissionDenied => Ok(false),
+//                     Err(err) => Err(anyhow!("failed to open file: {:?}", err)),
+//                 }
+//             } else if metadata.is_dir() {
+//                 match fs::read_dir(path) {
+//                     Ok(_) => Ok(true),
+//                     Err(err) if err.kind() == io::ErrorKind::PermissionDenied => Ok(false),
+//                     Err(err) => Err(anyhow!("failed to read dir: {:?}", err)),
+//                 }
+//             } else {
+//                 Ok(false)
+//             }
+//         }
+//         Err(err) if err.kind() == io::ErrorKind::PermissionDenied => Ok(false),
+//         Err(err) => Err(anyhow!("failed to get metadata: {:?}", err)),
+//     }
+// }
+
+fn current_uid() -> u32 {
+    unsafe { libc::geteuid() }
+}
+
+fn pre_exec_shell(user_name: &str) -> String {
+    let uid = current_uid();
+    let cmds = vec![
+        format!("export HOME=/home/{}", user_name),
+        format!("usermod -u {} {}", uid, user_name),
+        "chown -R nonroot /home/nonroot".to_string(),
+        "source $HOME/.bashrc".to_string(),
+    ];
+
+    cmds.join(" && ")
 }
