@@ -15,6 +15,7 @@ use crate::config::Config;
 use crate::engine::{new_command, Engine, HTTPS_PROXY, HTTP_PROXY};
 
 const ROOT_PATH: &str = "/";
+const HOME_PATH: &str = "/home";
 
 pub struct DockerConfig {
     disable_ssh: bool,
@@ -94,6 +95,7 @@ impl Docker {
                 .ok_or(anyhow!("empty parent dir path"))?;
 
             if parent_dir_name == ROOT_PATH
+                || parent_dir_name == HOME_PATH
                 || !has_read_permission(parent_dir.as_path()).context("has read permission")?
             {
                 break;
