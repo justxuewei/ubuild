@@ -7,7 +7,7 @@ use std::{env, fs, io};
 
 use anyhow::{anyhow, Context, Result};
 use async_trait::async_trait;
-use log::{error, info};
+use log::{debug, error, info};
 use tokio::process::Command;
 
 use crate::cli::Args;
@@ -209,6 +209,7 @@ impl Engine for Docker {
         self.check().await.context("check")?;
 
         let mut cmd = self.build_docker_run_command()?;
+        debug!("docker run command: {:?}", cmd);
 
         let output = cmd.output().await?;
         let stdout = String::from_utf8(output.stdout)?;
