@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 use std::env::{current_dir, home_dir};
 use std::os::unix::fs::PermissionsExt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
-use std::{env, fs};
+use std::{env, fs, io};
 
 use anyhow::{anyhow, Context, Result};
 use async_trait::async_trait;
@@ -76,17 +76,22 @@ impl Docker {
             .canonicalize()
             .context("canonicalize")?;
 
+        if !has_read_permission(root_dir.as_path()).context("has read permission")? {
+            return Err(anyhow!("no permission to read {:?}", root_dir));
+        }
+
         // find root dir recursively, stop while no parent dir exists or no
         // permission.
         while let Some(parent) = root_dir.parent() {
-            if parent
-                .canonicalize()
-                .context("canonicalize")?
+            let parent_dir = parent.canonicalize().context("canonicalize")?;
+            let parent_dir_name = parent_dir
                 .as_path()
                 .as_os_str()
                 .to_str()
-                .ok_or(anyhow!("empty parent dir path"))?
-                == ROOT_PATH
+                .ok_or(anyhow!("empty parent dir path"))?;
+
+            if parent_dir_name == ROOT_PATH
+                || !has_read_permission(parent_dir.as_path()).context("has read permission")?
             {
                 break;
             }
@@ -275,5 +280,29 @@ impl Engine for Docker {
             child.wait().await?;
         }
         Ok(())
+    }
+}
+
+fn has_read_permission(path: &Path) -> Result<bool> {
+    match fs::metadata(path) {
+        Ok(metadata) => {
+            if metadata.is_file() {
+                match fs::File::open(path) {
+                    Ok(_) => Ok(true),
+                    Err(err) if err.kind() == io::ErrorKind::PermissionDenied => Ok(false),
+                    Err(err) => Err(anyhow!("failed to open file: {:?}", err)),
+                }
+            } else if metadata.is_dir() {
+                match fs::read_dir(path) {
+                    Ok(_) => Ok(true),
+                    Err(err) if err.kind() == io::ErrorKind::PermissionDenied => Ok(false),
+                    Err(err) => Err(anyhow!("failed to read dir: {:?}", err)),
+                }
+            } else {
+                Ok(false)
+            }
+        }
+        Err(err) if err.kind() == io::ErrorKind::PermissionDenied => Ok(false),
+        Err(err) => Err(anyhow!("failed to get metadata: {:?}", err)),
     }
 }

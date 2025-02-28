@@ -17,7 +17,9 @@ pub struct Args {
     #[arg(long, short)]
     pub enable_rust_cache: Option<bool>,
 
-    /// Mount base path, the default value is $HOME.
+    /// Mount base path, the default value is the root dir of current path.
+    /// For example, the current path id "/home/foo/bar", the default mount
+    /// base is "/home".
     #[arg(short, long)]
     pub base_path: Option<String>,
 
