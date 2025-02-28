@@ -14,6 +14,7 @@ pub struct Config {
 #[derive(serde::Deserialize, Default, Debug, Clone)]
 pub struct EngineConfig {
     pub enable_rust_cache: Option<bool>,
+    pub base_path: Option<String>,
 }
 
 #[derive(serde::Deserialize, Default, Debug, Clone)]

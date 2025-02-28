@@ -37,7 +37,10 @@ impl DockerConfig {
                     .and_then(|c| c.enable_rust_cache)
                     .unwrap_or_default()
             }),
-            base_path: args.base_path.clone(),
+            base_path: match args.base_path.as_ref() {
+                Some(base_path) => Some(base_path.clone()),
+                None => engine_config.and_then(|c| c.base_path.clone()),
+            },
             user: args.user.clone(),
             image: args.image.clone(),
             command: args.command.clone(),
